@@ -1,4 +1,4 @@
-CC=clang
+CC=gcc
 CFLAGS=-std=c99 -Wall -Werror
 
 server: server.o
