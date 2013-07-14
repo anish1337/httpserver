@@ -32,6 +32,8 @@ int main()
   char buff[BUFFLEN];
   ssize_t rcount;
 
+  // for forking
+  ssize_t pid;
 
   // files
   FILE* sfile;
@@ -68,59 +70,79 @@ int main()
 	  printf("Error accepting connection\n");
 	  exit(EXIT_FAILURE);
 	}
+      // fork the process so that the new process can serve 
+      // the client while parent continues listening
+      pid = fork();
 
-      while(1)
+      // child process
+      if(pid==0)
 	{
-	  memset(buff, '\0', BUFFLEN);
-	  memset(fname, '\0', BUFFLEN);
-      
-	  // read data from the connection and store
-	  // it in buff
-	  if((rcount = read(sock_connect, buff, BUFFLEN))==-1)
+	  while(1)
 	    {
-	      printf("Error reading\n");
+	      memset(buff, '\0', BUFFLEN);
+	      memset(fname, '\0', BUFFLEN);
+      
+	      // read data from the connection and store
+	      // it in buff
+	      if((rcount = read(sock_connect, buff, BUFFLEN))==-1)
+		{
+		  printf("Error reading\n");
+		  exit(EXIT_FAILURE);
+		}
+
+	      // exit if client sends 'q'
+	      if(buff[0]=='q')
+		break;
+
+	      // print buff to stdout
+	      for(ssize_t i=0; i<rcount; i++)
+		{
+		  printf("%c", buff[i]);
+		  fname[i] = buff[i];
+		}
+      
+	      // to exclude the ^M newline char
+	      fname[rcount-2] = '\0';
+
+	      // open the file for reading if it exists
+	      // and write the contents to the socket
+	      if((sfile = fopen(fname, "r"))==NULL)
+		write(sock_connect, "File not found!\n", 16);
+
+	      else
+		{
+		  char ch;
+		  while((ch = fgetc(sfile))!= EOF)
+		    write(sock_connect, &ch, sizeof(ch));
+		}
+
+
+	      if(sfile!=NULL)
+		fclose(sfile);
+	    }
+	  if(close(sock_connect)==-1)
+	    {
+	      printf("Error closing socket");
 	      exit(EXIT_FAILURE);
 	    }
-
-	  // exit if client sends 'q'
-	  if(buff[0]=='q')
-	    break;
-
-	  // print buff to stdout
-	  for(ssize_t i=0; i<rcount; i++)
-	    {
-	      printf("%c", buff[i]);
-	      fname[i] = buff[i];
-	    }
-      
-	  // to exclude the ^M newline char
-	  fname[rcount-2] = '\0';
-
-	  // open the file for reading if it exists
-	  // and write the contents to the socket
-	  if((sfile = fopen(fname, "r"))==NULL)
-	    write(sock_connect, "File not found!\n", 16);
-
 	  else
 	    {
-	      char ch;
-	      while((ch = fgetc(sfile))!= EOF)
-		write(sock_connect, &ch, sizeof(ch));
+	      exit(EXIT_SUCCESS);
 	    }
-
-
-	  if(sfile!=NULL)
-	    fclose(sfile);
 	}
-      break;
+      
+      // parent process
+      else
+	{
+	  // closes the new connection
+	  if(close(sock_connect)==-1)
+	    {
+	      printf("Error closing socket");
+	      exit(EXIT_FAILURE);
+	    }
+	}
     }
 
-  // close the connection
-  if(close(sock_connect)==-1)
-    {
-      printf("Error closing socket");
-      exit(EXIT_FAILURE);
-    }
 
   if(close(sock_listen)==-1)
     {
